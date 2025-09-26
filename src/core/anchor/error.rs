@@ -9,4 +9,7 @@ pub enum AnchorServiceError {
 
     #[error("Matrix crypto core error: {0}")]
     MatrixCryptoCoreError(#[from] LinearSystemError),
+
+    #[error("Invalid anchor type")]
+    InvalidAnchorType,
 }

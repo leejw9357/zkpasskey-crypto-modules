@@ -18,3 +18,8 @@ pub struct DLAnchorKeyExtension<C: CurveGroup> {
     pub k: usize,
     pub max_claim_len: usize,
 }
+
+pub enum AnchorType {
+    DL,
+    Poseidon,
+}
