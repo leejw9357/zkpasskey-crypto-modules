@@ -30,6 +30,13 @@ pub enum AnchorType {
 }
 
 #[derive(Serialize, Deserialize)]
+pub struct AnchorKeyGenRequestDto {
+    pub n: usize,
+    pub k: usize,
+    pub max_claim_len: usize,
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct AnchorRequestDto {
     pub variant: String,
     pub anchor_key_path: String,

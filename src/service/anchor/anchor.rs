@@ -1,5 +1,6 @@
 use ark_ec::CurveGroup;
 
+use ark_std::rand::rngs::OsRng;
 use common::{
     codec::point::ToDecimalStr,
     gadget::{anchor::poseidon::PoseidonAnchorSecret, hashes::poseidon::get_poseidon_params},
@@ -9,8 +10,9 @@ use crate::{
     core::anchor::{AnchorService, dl::DLAnchorService, poseidon::PoseidonAnchorService},
     error::error::ApplicationError,
     interface::anchor::{
-        AnchorRequestDto, AnchorResponseDto, AnchorType, DLAnchorKeyExtension,
-        DeriveSecretIndicesRequestDto, DeriveSecretIndicesResponseDto, PoseidonAnchorKeyExtension,
+        AnchorKeyGenRequestDto, AnchorRequestDto, AnchorResponseDto, AnchorType,
+        DLAnchorKeyExtension, DeriveSecretIndicesRequestDto, DeriveSecretIndicesResponseDto,
+        PoseidonAnchorKeyExtension,
     },
     service::{
         anchor::utils::{
@@ -22,6 +24,25 @@ use crate::{
     },
     utils::padding::fit_len_to_field,
 };
+
+pub fn poseidon_anchor_key_gen(
+    dto: AnchorKeyGenRequestDto,
+) -> Result<PoseidonAnchorKeyExtension<AppField>, ApplicationError> {
+    let mut rng = OsRng;
+
+    let anchor_key = PoseidonAnchorService::setup(&mut rng, dto.n, dto.k, dto.max_claim_len)?;
+
+    Ok(anchor_key)
+}
+
+pub fn dl_anchor_key_gen(
+    dto: AnchorKeyGenRequestDto,
+) -> Result<DLAnchorKeyExtension<AppCurve>, ApplicationError> {
+    let mut rng = OsRng;
+
+    let anchor_key = DLAnchorService::setup(&mut rng, dto.n, dto.k, dto.max_claim_len)?;
+    Ok(anchor_key)
+}
 
 pub fn create_anchor(dto: AnchorRequestDto) -> Result<AnchorResponseDto, ApplicationError> {
     let variant = dto.variant.parse::<AnchorType>()?;
