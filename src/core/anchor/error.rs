@@ -12,4 +12,7 @@ pub enum AnchorServiceError {
 
     #[error("Invalid anchor type")]
     InvalidAnchorType,
+
+    #[error("Invalid anchor format: {0}")]
+    InvalidFormat(String),
 }

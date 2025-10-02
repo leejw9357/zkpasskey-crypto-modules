@@ -2,9 +2,13 @@ use std::marker::PhantomData;
 
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
-use common::gadget::{anchor::{
-    dl::{DLAnchor, DLAnchorScheme, DLAnchorSecret}, AnchorScheme
-}, matrix::Matrix};
+use common::gadget::{
+    anchor::{
+        AnchorScheme,
+        dl::{DLAnchor, DLAnchorScheme, DLAnchorSecret},
+    },
+    matrix::Matrix,
+};
 
 use crate::{
     core::anchor::{AnchorParams, AnchorService},
@@ -21,7 +25,7 @@ where
 pub struct DLAnchorService;
 
 impl<C: CurveGroup> AnchorService<DLAnchorParams<C>> for DLAnchorService
-where 
+where
     C::BaseField: PrimeField,
 {
     fn setup<R: ark_std::rand::Rng>(
@@ -53,15 +57,20 @@ where
         Ok(anchor)
     }
 
-    fn derive_secret_indices(anchor_key: &<DLAnchorParams<C> as AnchorParams>::PublicKey, anchor: &<DLAnchorParams<C> as AnchorParams>::Anchor, known_secrets: &<DLAnchorParams<C> as AnchorParams>::Secret) -> Result<Vec<usize>, super::error::AnchorServiceError> {
+    fn derive_secret_indices(
+        anchor_key: &<DLAnchorParams<C> as AnchorParams>::PublicKey,
+        anchor: &<DLAnchorParams<C> as AnchorParams>::Anchor,
+        known_secrets: &<DLAnchorParams<C> as AnchorParams>::Secret,
+    ) -> Result<Vec<usize>, super::error::AnchorServiceError> {
         let matrix = Matrix::<C::ScalarField>::new(anchor_key.n, anchor_key.k)?;
-        let indices = DLAnchorScheme::get_indices(&anchor_key.anchor_key, anchor, known_secrets, &matrix)?;
+        let indices =
+            DLAnchorScheme::get_indices(&anchor_key.anchor_key, anchor, known_secrets, &matrix)?;
         Ok(indices)
     }
 }
 
 impl<C: CurveGroup> AnchorParams for DLAnchorParams<C>
-where 
+where
     C::BaseField: PrimeField,
 {
     type Anchor = DLAnchor<C>;

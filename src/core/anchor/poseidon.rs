@@ -55,7 +55,12 @@ impl<F: PrimeField + Absorb> AnchorService<PoseidonAnchorParams<F>> for Poseidon
         known_secrets: &<PoseidonAnchorParams<F> as AnchorParams>::Secret,
     ) -> Result<Vec<usize>, super::error::AnchorServiceError> {
         let matrix = Matrix::<F>::new(anchor_key.n, anchor_key.k)?;
-        let indices = PoseidonAnchorScheme::get_indices(&anchor_key.anchor_key, anchor, known_secrets, &matrix)?;
+        let indices = PoseidonAnchorScheme::get_indices(
+            &anchor_key.anchor_key,
+            anchor,
+            known_secrets,
+            &matrix,
+        )?;
         Ok(indices)
     }
 }
