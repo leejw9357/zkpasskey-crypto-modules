@@ -13,7 +13,9 @@ pub struct PoseidonAnchorKeyExtension<F: PrimeField> {
     pub anchor_key: PoseidonAnchorPublicKey<F>,
     pub n: usize,
     pub k: usize,
-    pub max_claim_len: usize,
+    pub max_aud_len: Option<usize>,
+    pub max_iss_len: Option<usize>,
+    pub max_sub_len: usize,
 }
 
 #[derive(Clone, CanonicalSerialize, CanonicalDeserialize)]
@@ -21,7 +23,9 @@ pub struct DLAnchorKeyExtension<C: CurveGroup> {
     pub anchor_key: DLAnchorPublicKey<C>,
     pub n: usize,
     pub k: usize,
-    pub max_claim_len: usize,
+    pub max_aud_len: Option<usize>,
+    pub max_iss_len: Option<usize>,
+    pub max_sub_len: usize,
 }
 
 pub enum AnchorType {
@@ -33,7 +37,9 @@ pub enum AnchorType {
 pub struct AnchorKeyGenRequestDto {
     pub n: usize,
     pub k: usize,
-    pub max_claim_len: usize,
+    pub max_aud_len: Option<usize>,
+    pub max_iss_len: Option<usize>,
+    pub max_sub_len: usize,
 }
 
 #[derive(Serialize, Deserialize)]

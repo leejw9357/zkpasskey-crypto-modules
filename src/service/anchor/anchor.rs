@@ -1,5 +1,3 @@
-use ark_ec::CurveGroup;
-
 use ark_std::rand::rngs::OsRng;
 use common::{
     codec::point::ToDecimalStr,
@@ -22,7 +20,7 @@ use crate::{
         constants::{AppCurve, AppField, PoseidonHash},
         key::KeyLoadable,
     },
-    utils::padding::fit_len_to_field,
+    utils::padding::calculate_fitted_lengths,
 };
 
 pub fn poseidon_anchor_key_gen(
@@ -30,7 +28,14 @@ pub fn poseidon_anchor_key_gen(
 ) -> Result<PoseidonAnchorKeyExtension<AppField>, ApplicationError> {
     let mut rng = OsRng;
 
-    let anchor_key = PoseidonAnchorService::setup(&mut rng, dto.n, dto.k, dto.max_claim_len)?;
+    let anchor_key = PoseidonAnchorService::setup(
+        &mut rng,
+        dto.n,
+        dto.k,
+        dto.max_aud_len,
+        dto.max_iss_len,
+        dto.max_sub_len,
+    )?;
 
     Ok(anchor_key)
 }
@@ -40,7 +45,14 @@ pub fn dl_anchor_key_gen(
 ) -> Result<DLAnchorKeyExtension<AppCurve>, ApplicationError> {
     let mut rng = OsRng;
 
-    let anchor_key = DLAnchorService::setup(&mut rng, dto.n, dto.k, dto.max_claim_len)?;
+    let anchor_key = DLAnchorService::setup(
+        &mut rng,
+        dto.n,
+        dto.k,
+        dto.max_aud_len,
+        dto.max_iss_len,
+        dto.max_sub_len,
+    )?;
     Ok(anchor_key)
 }
 
@@ -75,9 +87,15 @@ fn handle_poseidon_anchor(dto: &AnchorRequestDto) -> Result<AnchorResponseDto, A
         false,
     )?;
 
-    let max_claim_len = fit_len_to_field::<AppField>(&anchor_key.max_claim_len);
+    let (max_aud_len, max_iss_len, max_sub_len) = calculate_fitted_lengths::<AppField>(
+        anchor_key.max_aud_len,
+        anchor_key.max_iss_len,
+        anchor_key.max_sub_len,
+    );
 
-    let concatenated_secrets = dto.secrets.concatenate(max_claim_len, '0')?;
+    let concatenated_secrets = dto
+        .secrets
+        .concatenate((max_aud_len, max_iss_len, max_sub_len), '0')?;
 
     let poseidon_params = get_poseidon_params::<AppField>();
 
@@ -103,10 +121,15 @@ fn handle_dl_anchor(dto: &AnchorRequestDto) -> Result<AnchorResponseDto, Applica
     let anchor_key =
         DLAnchorKeyExtension::<AppCurve>::from_path(dto.anchor_key_path.as_ref(), false, false)?;
 
-    let max_claim_len =
-        fit_len_to_field::<<AppCurve as CurveGroup>::BaseField>(&anchor_key.max_claim_len);
+    let (max_aud_len, max_iss_len, max_sub_len) = calculate_fitted_lengths::<AppField>(
+        anchor_key.max_aud_len,
+        anchor_key.max_iss_len,
+        anchor_key.max_sub_len,
+    );
 
-    let concatenated_secrets = dto.secrets.concatenate(max_claim_len, '0')?;
+    let concatenated_secrets = dto
+        .secrets
+        .concatenate((max_aud_len, max_iss_len, max_sub_len), '0')?;
 
     let poseidon_params = get_poseidon_params::<AppField>();
 
@@ -142,10 +165,15 @@ fn handle_poseidon_derive_indices(
 
     let anchor = AppPoseidonAnchor::try_from(dto.anchor.clone())?.0;
 
-    let max_claim_len =
-        fit_len_to_field::<<AppCurve as CurveGroup>::BaseField>(&anchor_key.max_claim_len);
+    let (max_aud_len, max_iss_len, max_sub_len) = calculate_fitted_lengths::<AppField>(
+        anchor_key.max_aud_len,
+        anchor_key.max_iss_len,
+        anchor_key.max_sub_len,
+    );
 
-    let concatenated_secrets = dto.known_secrets.concatenate(max_claim_len, '0')?;
+    let concatenated_secrets = dto
+        .known_secrets
+        .concatenate((max_aud_len, max_iss_len, max_sub_len), '0')?;
 
     let poseidon_params = get_poseidon_params::<AppField>();
 
@@ -179,10 +207,15 @@ fn handle_dl_derive_indices(
 
     let anchor = AppDLAnchor::try_from(dto.anchor.clone())?.0;
 
-    let max_claim_len =
-        fit_len_to_field::<<AppCurve as CurveGroup>::BaseField>(&anchor_key.max_claim_len);
+    let (max_aud_len, max_iss_len, max_sub_len) = calculate_fitted_lengths::<AppField>(
+        anchor_key.max_aud_len,
+        anchor_key.max_iss_len,
+        anchor_key.max_sub_len,
+    );
 
-    let concatenated_secrets = dto.known_secrets.concatenate(max_claim_len, '0')?;
+    let concatenated_secrets = dto
+        .known_secrets
+        .concatenate((max_aud_len, max_iss_len, max_sub_len), '0')?;
 
     let poseidon_params = get_poseidon_params::<AppField>();
 

@@ -25,7 +25,9 @@ impl<F: PrimeField + Absorb> AnchorService<PoseidonAnchorParams<F>> for Poseidon
         rng: &mut R,
         n: usize,
         k: usize,
-        max_claim_len: usize,
+        max_aud_len: Option<usize>,
+        max_iss_len: Option<usize>,
+        max_sub_len: usize,
     ) -> Result<
         <PoseidonAnchorParams<F> as AnchorParams>::PublicKey,
         super::error::AnchorServiceError,
@@ -35,7 +37,9 @@ impl<F: PrimeField + Absorb> AnchorService<PoseidonAnchorParams<F>> for Poseidon
             anchor_key,
             n,
             k,
-            max_claim_len,
+            max_aud_len,
+            max_iss_len,
+            max_sub_len,
         })
     }
 

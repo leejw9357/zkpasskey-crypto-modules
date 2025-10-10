@@ -32,7 +32,9 @@ where
         rng: &mut R,
         n: usize,
         k: usize,
-        max_claim_len: usize,
+        max_aud_len: Option<usize>,
+        max_iss_len: Option<usize>,
+        max_sub_len: usize,
     ) -> Result<
         <DLAnchorParams<C> as super::AnchorParams>::PublicKey,
         super::error::AnchorServiceError,
@@ -43,7 +45,9 @@ where
             anchor_key,
             n,
             k,
-            max_claim_len,
+            max_aud_len,
+            max_iss_len,
+            max_sub_len,
         })
     }
 

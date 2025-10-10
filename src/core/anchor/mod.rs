@@ -18,7 +18,7 @@ pub trait AnchorParams {
 }
 
 pub trait AnchorService<P: AnchorParams> {
-    fn setup<R: Rng>(rng: &mut R, n: usize, k: usize, max_claim_len: usize) -> Result<P::PublicKey, AnchorServiceError>;
+    fn setup<R: Rng>(rng: &mut R, n: usize, k: usize, max_aud_len: Option<usize>, max_iss_len: Option<usize>, max_sub_len: usize) -> Result<P::PublicKey, AnchorServiceError>;
 
     fn anchor(keys: &P::PublicKey, secret: &P::Secret) -> Result<P::Anchor, AnchorServiceError>;
 

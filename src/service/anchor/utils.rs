@@ -15,21 +15,24 @@ use crate::{error::error::ApplicationError, interface::anchor::SecretDto};
 impl SecretDto {
     pub fn concatenate(
         &self,
-        target_len: usize,
+        target_len: (usize, usize, usize),  
         pad_char: char,
     ) -> Result<String, ApplicationError> {
+
+        let (aud_len, iss_len, sub_len) = target_len;
+
         let aud_processed = match &self.aud {
-            Some(s) => Self::pad(s, target_len, pad_char)?,
+            Some(s) => Self::pad(s, aud_len, pad_char)?,
             None => String::new(),
         };
 
         let iss_processed = match &self.iss {
-            Some(s) => Self::pad(s, target_len, pad_char)?,
+            Some(s) => Self::pad(s, iss_len, pad_char)?,
             None => String::new(),
         };
 
         let sub_processed = match &self.sub {
-            Some(s) => Self::pad(s, target_len, pad_char)?,
+            Some(s) => Self::pad(s, sub_len, pad_char)?,
             None => String::new(),
         };
 
@@ -48,6 +51,7 @@ impl SecretDto {
         }
 
         let mut result = String::with_capacity(target_len);
+        result.push_str(s);
         let pad_needed = target_len - s.len();
         result.extend(std::iter::repeat(pad_char).take(pad_needed));
 
@@ -60,7 +64,7 @@ pub trait ConcatenateSecrets {
 
     fn concatenate(
         &self,
-        target_len: usize,
+        target_len: (usize, usize, usize), // (aud_len, iss_len, sub_len)
         pad_char: char,
     ) -> Result<Vec<String>, ApplicationError>;
 }
@@ -70,7 +74,7 @@ impl ConcatenateSecrets for [SecretDto] {
 
     fn concatenate(
         &self,
-        target_len: usize,
+        target_len: (usize, usize, usize), // (aud_len, iss_len, sub_len)
         pad_char: char,
     ) -> Result<Self::Output, ApplicationError> {
         self.iter()
