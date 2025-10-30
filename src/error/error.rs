@@ -8,7 +8,7 @@ pub enum ApplicationError {
     CoreServiceError(#[from] CryptoServiceError),
 
     #[error("Key error: {0}")]
-    KeyError(#[from] KeyError),
+    KeyServiceError(#[from] KeyError),
 
     #[error("Invalid variant")]
     InvalidVariant,
@@ -34,11 +34,39 @@ pub enum CryptoServiceError {
 
 #[derive(Debug, Error)]
 pub enum KeyError {
-    #[error("파일 I/O 에러: {0}")]
-    IoError(#[from] std::io::Error),
+    #[error("Key not found for handle: {0}")]
+    NotFound(u64),
 
-    #[error("Deserialization error: {0}")]
-    DeserializationError(#[from] ark_serialize::SerializationError),
+    #[error("Key type mismatch for handle {0}")]
+    TypeMismatch(u64),
+
+    #[error("Failed to load key from path {path}: {source}")]
+    LoadFailed {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("Deserialization failed for {path}: {source}")]
+    DeserializeFailed {
+        path: String,
+        #[source]
+        source: ark_serialize::SerializationError,
+    },
+
+    #[error("Failed to save key to path {path}: {source}")]
+    SaveFailed {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("Serialization failed for {path}: {source}")]
+    SerializeFailed {
+        path: String,
+        #[source]
+        source: ark_serialize::SerializationError,
+    },
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]

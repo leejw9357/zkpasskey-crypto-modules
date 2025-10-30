@@ -1,234 +1,211 @@
+use std::path::PathBuf;
+
 use ark_std::rand::rngs::OsRng;
 use common::{
     codec::point::ToDecimalStr,
     gadget::{anchor::poseidon::PoseidonAnchorSecret, hashes::poseidon::get_poseidon_params},
 };
+use common_gadget::anchor::dl::DLAnchorSecret;
 
 use crate::{
     core::anchor::{AnchorService, dl::DLAnchorService, poseidon::PoseidonAnchorService},
     error::error::ApplicationError,
-    interface::anchor::{
-        AnchorKeyGenRequestDto, AnchorRequestDto, AnchorResponseDto, AnchorType,
-        DLAnchorKeyExtension, DeriveSecretIndicesRequestDto, DeriveSecretIndicesResponseDto,
-        PoseidonAnchorKeyExtension,
-    },
+    interface::anchor::{DLAnchorKeyExtension, PoseidonAnchorKeyExtension, SecretDto},
     service::{
         anchor::utils::{
             AppDLAnchor, AppPoseidonAnchor, ConcatenateSecrets, DLSecretGenerator, MessageToHashes,
             SecretGenerator,
         },
         constants::{AppCurve, AppField, PoseidonHash},
-        key::KeyLoadable,
+        key::{anchor::KEY_MANAGER, io::save_key_uncompressed, manager::KeyHandle},
     },
     utils::padding::calculate_fitted_lengths,
 };
 
-pub fn poseidon_anchor_key_gen(
-    dto: AnchorKeyGenRequestDto,
-) -> Result<PoseidonAnchorKeyExtension<AppField>, ApplicationError> {
+pub fn generate_and_write_poseidon_anchor_key(
+    n: usize,
+    k: usize,
+    max_aud_len: Option<usize>,
+    max_iss_len: Option<usize>,
+    max_sub_len: usize,
+    out_path: String,
+) -> Result<(), ApplicationError> {
     let mut rng = OsRng;
 
-    let anchor_key = PoseidonAnchorService::setup(
-        &mut rng,
-        dto.n,
-        dto.k,
-        dto.max_aud_len,
-        dto.max_iss_len,
-        dto.max_sub_len,
-    )?;
+    let key: PoseidonAnchorKeyExtension<AppField> =
+        PoseidonAnchorService::setup(&mut rng, n, k, max_aud_len, max_iss_len, max_sub_len)?;
 
-    Ok(anchor_key)
+    let path = PathBuf::from(out_path);
+    save_key_uncompressed(&path, &key)?;
+
+    Ok(())
 }
 
-pub fn dl_anchor_key_gen(
-    dto: AnchorKeyGenRequestDto,
-) -> Result<DLAnchorKeyExtension<AppCurve>, ApplicationError> {
+pub fn generate_and_write_dl_anchor_key(
+    n: usize,
+    k: usize,
+    max_aud_len: Option<usize>,
+    max_iss_len: Option<usize>,
+    max_sub_len: usize,
+    out_path: String,
+) -> Result<(), ApplicationError> {
     let mut rng = OsRng;
 
-    let anchor_key = DLAnchorService::setup(
-        &mut rng,
-        dto.n,
-        dto.k,
-        dto.max_aud_len,
-        dto.max_iss_len,
-        dto.max_sub_len,
-    )?;
-    Ok(anchor_key)
+    let key: DLAnchorKeyExtension<AppCurve> =
+        DLAnchorService::setup(&mut rng, n, k, max_aud_len, max_iss_len, max_sub_len)?;
+
+    let path = PathBuf::from(out_path);
+    save_key_uncompressed(&path, &key)?;
+
+    Ok(())
 }
 
-pub fn create_anchor(dto: AnchorRequestDto) -> Result<AnchorResponseDto, ApplicationError> {
-    let variant = dto.variant.parse::<AnchorType>()?;
+pub fn create_poseidon_anchor(
+    handle_raw: u64,
+    secrets: Vec<SecretDto>,
+) -> Result<Vec<String>, ApplicationError> {
+    let handle = KeyHandle(handle_raw);
 
-    let result = match variant {
-        AnchorType::Poseidon => handle_poseidon_anchor(&dto),
-        AnchorType::DL => handle_dl_anchor(&dto),
-    }?;
+    let anchor_key_arc = KEY_MANAGER.get_typed::<PoseidonAnchorKeyExtension<AppField>>(handle)?;
 
-    Ok(result)
-}
-
-pub fn derive_indices(
-    dto: DeriveSecretIndicesRequestDto,
-) -> Result<DeriveSecretIndicesResponseDto, ApplicationError> {
-    let variant = dto.variant.parse::<AnchorType>()?;
-
-    let result = match variant {
-        AnchorType::Poseidon => handle_poseidon_derive_indices(&dto),
-        AnchorType::DL => handle_dl_derive_indices(&dto),
-    }?;
-
-    Ok(result)
-}
-
-fn handle_poseidon_anchor(dto: &AnchorRequestDto) -> Result<AnchorResponseDto, ApplicationError> {
-    let anchor_key = PoseidonAnchorKeyExtension::<AppField>::from_path(
-        dto.anchor_key_path.as_ref(),
-        false,
-        false,
-    )?;
-
-    let (max_aud_len, max_iss_len, max_sub_len) = calculate_fitted_lengths::<AppField>(
-        anchor_key.max_aud_len,
-        anchor_key.max_iss_len,
-        anchor_key.max_sub_len,
-    );
-
-    let concatenated_secrets = dto
-        .secrets
-        .concatenate((max_aud_len, max_iss_len, max_sub_len), '0')?;
-
-    let poseidon_params = get_poseidon_params::<AppField>();
-
-    let hashed_message = MessageToHashes::<AppField, PoseidonHash>::to_hashes(
-        &concatenated_secrets[..],
-        &poseidon_params,
+    let hashed_message = derive_hashed_message(
+        &secrets,
+        anchor_key_arc.max_aud_len,
+        anchor_key_arc.max_iss_len,
+        anchor_key_arc.max_sub_len,
     )?;
 
     let anchor_secret: PoseidonAnchorSecret<AppField> = hashed_message.into();
+    let anchor = PoseidonAnchorService::anchor(&anchor_key_arc, &anchor_secret)?;
 
-    let anchor = PoseidonAnchorService::anchor(&anchor_key, &anchor_secret)?;
-
-    let result = anchor
+    let out = anchor
         .0
         .iter()
         .map(|x| x.to_string())
         .collect::<Vec<String>>();
 
-    Ok(AnchorResponseDto { anchor: result })
+    Ok(out)
 }
 
-fn handle_dl_anchor(dto: &AnchorRequestDto) -> Result<AnchorResponseDto, ApplicationError> {
-    let anchor_key =
-        DLAnchorKeyExtension::<AppCurve>::from_path(dto.anchor_key_path.as_ref(), false, false)?;
+pub fn create_dl_anchor(
+    handle_raw: u64,
+    secrets: Vec<SecretDto>,
+) -> Result<Vec<String>, ApplicationError> {
+    let handle = KeyHandle(handle_raw);
 
-    let (max_aud_len, max_iss_len, max_sub_len) = calculate_fitted_lengths::<AppField>(
-        anchor_key.max_aud_len,
-        anchor_key.max_iss_len,
-        anchor_key.max_sub_len,
-    );
+    let anchor_key_arc = KEY_MANAGER.get_typed::<DLAnchorKeyExtension<AppCurve>>(handle)?;
 
-    let concatenated_secrets = dto
-        .secrets
-        .concatenate((max_aud_len, max_iss_len, max_sub_len), '0')?;
-
-    let poseidon_params = get_poseidon_params::<AppField>();
-
-    let hashed_message = MessageToHashes::<AppField, PoseidonHash>::to_hashes(
-        &concatenated_secrets[..],
-        &poseidon_params,
+    let hashed_message = derive_hashed_message(
+        &secrets,
+        anchor_key_arc.max_aud_len,
+        anchor_key_arc.max_iss_len,
+        anchor_key_arc.max_sub_len,
     )?;
 
-    let (anchor_secret, _) = DLSecretGenerator::<AppCurve>::generate_secrets(hashed_message)?;
+    let (anchor_secret, _): (DLAnchorSecret<AppCurve>, _) =
+        DLSecretGenerator::<AppCurve>::generate_secrets(hashed_message)?;
 
-    let anchor = DLAnchorService::anchor(&anchor_key, &anchor_secret)?;
+    let anchor = DLAnchorService::anchor(&anchor_key_arc, &anchor_secret)?;
 
-    let result = anchor.0.iter().flat_map(|p| p.to_decimal_str()).collect();
+    let out = anchor
+        .0
+        .iter()
+        .flat_map(|p| p.to_decimal_str())
+        .collect::<Vec<String>>();
 
-    Ok(AnchorResponseDto { anchor: result })
+    Ok(out)
 }
 
-fn handle_poseidon_derive_indices(
-    dto: &DeriveSecretIndicesRequestDto,
-) -> Result<DeriveSecretIndicesResponseDto, ApplicationError> {
-    let anchor_key = PoseidonAnchorKeyExtension::<AppField>::from_path(
-        dto.anchor_key_path.as_ref(),
-        false,
-        false,
-    )?;
+pub fn poseidon_derive_indices(
+    handle_raw: u64,
+    anchor: Vec<String>,
+    known_secrets: Vec<SecretDto>,
+) -> Result<Vec<u8>, ApplicationError> {
+    let handle = KeyHandle(handle_raw);
 
-    if (anchor_key.n + anchor_key.k - 1) != dto.anchor.len() {
+    let anchor_key_arc = KEY_MANAGER.get_typed::<PoseidonAnchorKeyExtension<AppField>>(handle)?;
+
+    let expected_len = anchor_key_arc.n + anchor_key_arc.k - 1;
+    if expected_len != anchor.len() {
         return Err(ApplicationError::InvalidFormat(format!(
-            "Anchor length must be equal to n + k - 1 = {}",
-            anchor_key.n + anchor_key.k - 1
+            "Anchor length must be {} (n + k - 1), got {}",
+            expected_len,
+            anchor.len()
         )));
     }
 
-    let anchor = AppPoseidonAnchor::try_from(dto.anchor.clone())?.0;
+    let anchor_val = AppPoseidonAnchor::try_from(anchor)?.0;
 
-    let (max_aud_len, max_iss_len, max_sub_len) = calculate_fitted_lengths::<AppField>(
-        anchor_key.max_aud_len,
-        anchor_key.max_iss_len,
-        anchor_key.max_sub_len,
-    );
-
-    let concatenated_secrets = dto
-        .known_secrets
-        .concatenate((max_aud_len, max_iss_len, max_sub_len), '0')?;
-
-    let poseidon_params = get_poseidon_params::<AppField>();
-
-    let hashed_message = MessageToHashes::<AppField, PoseidonHash>::to_hashes(
-        &concatenated_secrets[..],
-        &poseidon_params,
+    let hashed_message = derive_hashed_message(
+        &known_secrets,
+        anchor_key_arc.max_aud_len,
+        anchor_key_arc.max_iss_len,
+        anchor_key_arc.max_sub_len,
     )?;
 
-    let known_secrets: PoseidonAnchorSecret<AppField> = hashed_message.into();
+    let known_secrets_struct: PoseidonAnchorSecret<AppField> = hashed_message.into();
 
-    let indices =
-        PoseidonAnchorService::derive_secret_indices(&anchor_key, &anchor, &known_secrets)?;
+    let indices = PoseidonAnchorService::derive_secret_indices(
+        &anchor_key_arc,
+        &anchor_val,
+        &known_secrets_struct,
+    )?;
 
-    Ok(DeriveSecretIndicesResponseDto {
-        indices: indices.into_iter().map(|i| i as u8).collect(),
-    })
+    Ok(indices.into_iter().map(|i| i as u8).collect())
 }
 
-fn handle_dl_derive_indices(
-    dto: &DeriveSecretIndicesRequestDto,
-) -> Result<DeriveSecretIndicesResponseDto, ApplicationError> {
-    let anchor_key =
-        DLAnchorKeyExtension::<AppCurve>::from_path(dto.anchor_key_path.as_ref(), false, false)?;
+pub fn dl_derive_indices(
+    handle_raw: u64,
+    anchor: Vec<String>,
+    known_secrets: Vec<SecretDto>,
+) -> Result<Vec<u8>, ApplicationError> {
+    let handle = KeyHandle(handle_raw);
 
-    if ((anchor_key.n + anchor_key.k - 1) * 2) != dto.anchor.len() {
+    let anchor_key_arc = KEY_MANAGER.get_typed::<DLAnchorKeyExtension<AppCurve>>(handle)?;
+
+    let expected_len = (anchor_key_arc.n + anchor_key_arc.k - 1) * 2;
+    if expected_len != anchor.len() {
         return Err(ApplicationError::InvalidFormat(format!(
-            "Anchor length must be equal to (n + k - 1) * 2 = {}",
-            (anchor_key.n + anchor_key.k - 1) * 2
+            "Anchor length must be {} ((n + k - 1) * 2), got {}",
+            expected_len,
+            anchor.len()
         )));
     }
 
-    let anchor = AppDLAnchor::try_from(dto.anchor.clone())?.0;
+    let anchor_val = AppDLAnchor::try_from(anchor)?.0;
 
-    let (max_aud_len, max_iss_len, max_sub_len) = calculate_fitted_lengths::<AppField>(
-        anchor_key.max_aud_len,
-        anchor_key.max_iss_len,
-        anchor_key.max_sub_len,
-    );
-
-    let concatenated_secrets = dto
-        .known_secrets
-        .concatenate((max_aud_len, max_iss_len, max_sub_len), '0')?;
-
-    let poseidon_params = get_poseidon_params::<AppField>();
-
-    let hashed_message = MessageToHashes::<AppField, PoseidonHash>::to_hashes(
-        &concatenated_secrets[..],
-        &poseidon_params,
+    let hashed_message = derive_hashed_message(
+        &known_secrets,
+        anchor_key_arc.max_aud_len,
+        anchor_key_arc.max_iss_len,
+        anchor_key_arc.max_sub_len,
     )?;
 
-    let (known_secrets, _) = DLSecretGenerator::<AppCurve>::generate_secrets(hashed_message)?;
+    let (known_secrets_struct, _rand): (DLAnchorSecret<AppCurve>, _) =
+        DLSecretGenerator::<AppCurve>::generate_secrets(hashed_message)?;
 
-    let indices = DLAnchorService::derive_secret_indices(&anchor_key, &anchor, &known_secrets)?;
+    let indices = DLAnchorService::derive_secret_indices(
+        &anchor_key_arc,
+        &anchor_val,
+        &known_secrets_struct,
+    )?;
 
-    Ok(DeriveSecretIndicesResponseDto {
-        indices: indices.into_iter().map(|i| i as u8).collect(),
-    })
+    Ok(indices.into_iter().map(|i| i as u8).collect())
+}
+
+fn derive_hashed_message(
+    secrets: &[SecretDto],
+    max_aud_len: Option<usize>,
+    max_iss_len: Option<usize>,
+    max_sub_len: usize,
+) -> Result<Vec<AppField>, ApplicationError> {
+    let (fit_aud, fit_iss, fit_sub) =
+        calculate_fitted_lengths::<AppField>(max_aud_len, max_iss_len, max_sub_len);
+
+    let concatenated = secrets.concatenate((fit_aud, fit_iss, fit_sub), '0')?;
+
+    let params = get_poseidon_params::<AppField>();
+    let hashed = MessageToHashes::<AppField, PoseidonHash>::to_hashes(&concatenated[..], &params)?;
+
+    Ok(hashed)
 }
