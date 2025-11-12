@@ -10,11 +10,20 @@ pub enum ApplicationError {
     #[error("Key error: {0}")]
     KeyServiceError(#[from] KeyError),
 
+    #[error("Utility error: {0}")]
+    UtilError(#[from] UtilError),
+
     #[error("Invalid variant")]
     InvalidVariant,
 
     #[error("Invalid format: {0}")]
     InvalidFormat(String),
+
+    #[error("Setup failed: {0}")]
+    SetupFailed(String),
+
+    #[error("Proof generation failed: {0}")]
+    ProofGenerationFailed(String),
 
     #[error("Other error: {0}")]
     Other(String),
@@ -82,6 +91,12 @@ pub enum SchnorrServiceError {
 
     #[error("Key generation failed: {0}")]
     KeyGenerationFailed(String),
+}
+
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum UtilError {
+    #[error("Convert Error: {0}")]
+    ConvertError(String),
 }
 
 impl From<AnchorServiceError> for ApplicationError {

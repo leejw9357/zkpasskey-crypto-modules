@@ -15,13 +15,14 @@ pub type PoseidonHash = CRH<AppField>;
 pub type Blake2 = Blake2s256;
 pub type Blake2Gadget = Blake2s256Gadget;
 pub type BigNatTestParams = BigNat512TestParams;
+pub type BN254 = ark_bn254::Bn254;
+pub type CV = ark_ed_on_bn254::constraints::EdwardsVar;
+pub type BNP = BigNat512TestParams;
 
 
 // pub type Affine = ark_ed_on_bn254::EdwardsAffine;
 // pub type C = ark_ed_on_bn254::EdwardsProjective;
-// pub type CV = ark_ed_on_bn254::constraints::EdwardsVar;
 // pub type ConstraintF<C> = <<C as CurveGroup>::BaseField as Field>::BasePrimeField;
-// pub type BNP = BigNat512TestParams;
 // pub type Sha256HP = Sha256Bn254ParamProvider;
 // pub type MiMCHP = MimcBn254ParamProvider;
 // pub type CRHG = MiMCGadget<ConstraintF<C>, MiMCHP>;

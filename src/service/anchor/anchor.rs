@@ -1,11 +1,20 @@
 use std::path::PathBuf;
 
+use ark_crypto_primitives::crh::poseidon;
 use ark_std::rand::rngs::OsRng;
 use common::{
-    codec::point::ToDecimalStr,
+    codec::point::{ToDecimalStr, str_to_field},
     gadget::{anchor::poseidon::PoseidonAnchorSecret, hashes::poseidon::get_poseidon_params},
 };
-use common_gadget::anchor::dl::DLAnchorSecret;
+use common_gadget::{
+    anchor::{
+        AnchorScheme,
+        dl::DLAnchorSecret,
+        poseidon::{PoseidonAnchor, PoseidonAnchorScheme, PoseidonAnchorWitness},
+        utils::process_secrets_poseidon,
+    },
+    matrix::Matrix,
+};
 
 use crate::{
     core::anchor::{AnchorService, dl::DLAnchorService, poseidon::PoseidonAnchorService},
@@ -17,7 +26,7 @@ use crate::{
             SecretGenerator,
         },
         constants::{AppCurve, AppField, PoseidonHash},
-        key::{anchor::KEY_MANAGER, io::save_key_uncompressed, manager::KeyHandle},
+        key::{anchor::ANCHOR_KEY_MANAGER, io::save_key_uncompressed, manager::KeyHandle},
     },
     utils::padding::calculate_fitted_lengths,
 };
@@ -66,7 +75,8 @@ pub fn create_poseidon_anchor(
 ) -> Result<Vec<String>, ApplicationError> {
     let handle = KeyHandle(handle_raw);
 
-    let anchor_key_arc = KEY_MANAGER.get_typed::<PoseidonAnchorKeyExtension<AppField>>(handle)?;
+    let anchor_key_arc =
+        ANCHOR_KEY_MANAGER.get_typed::<PoseidonAnchorKeyExtension<AppField>>(handle)?;
 
     let hashed_message = derive_hashed_message(
         &secrets,
@@ -93,7 +103,7 @@ pub fn create_dl_anchor(
 ) -> Result<Vec<String>, ApplicationError> {
     let handle = KeyHandle(handle_raw);
 
-    let anchor_key_arc = KEY_MANAGER.get_typed::<DLAnchorKeyExtension<AppCurve>>(handle)?;
+    let anchor_key_arc = ANCHOR_KEY_MANAGER.get_typed::<DLAnchorKeyExtension<AppCurve>>(handle)?;
 
     let hashed_message = derive_hashed_message(
         &secrets,
@@ -123,7 +133,8 @@ pub fn poseidon_derive_indices(
 ) -> Result<Vec<u8>, ApplicationError> {
     let handle = KeyHandle(handle_raw);
 
-    let anchor_key_arc = KEY_MANAGER.get_typed::<PoseidonAnchorKeyExtension<AppField>>(handle)?;
+    let anchor_key_arc =
+        ANCHOR_KEY_MANAGER.get_typed::<PoseidonAnchorKeyExtension<AppField>>(handle)?;
 
     let expected_len = anchor_key_arc.n + anchor_key_arc.k - 1;
     if expected_len != anchor.len() {
@@ -161,7 +172,7 @@ pub fn dl_derive_indices(
 ) -> Result<Vec<u8>, ApplicationError> {
     let handle = KeyHandle(handle_raw);
 
-    let anchor_key_arc = KEY_MANAGER.get_typed::<DLAnchorKeyExtension<AppCurve>>(handle)?;
+    let anchor_key_arc = ANCHOR_KEY_MANAGER.get_typed::<DLAnchorKeyExtension<AppCurve>>(handle)?;
 
     let expected_len = (anchor_key_arc.n + anchor_key_arc.k - 1) * 2;
     if expected_len != anchor.len() {
@@ -193,7 +204,7 @@ pub fn dl_derive_indices(
     Ok(indices.into_iter().map(|i| i as u8).collect())
 }
 
-fn derive_hashed_message(
+pub(crate) fn derive_hashed_message(
     secrets: &[SecretDto],
     max_aud_len: Option<usize>,
     max_iss_len: Option<usize>,
@@ -208,4 +219,53 @@ fn derive_hashed_message(
     let hashed = MessageToHashes::<AppField, PoseidonHash>::to_hashes(&concatenated[..], &params)?;
 
     Ok(hashed)
+}
+
+pub fn build_poseidon_anchor_from_strings(
+    anchor_parts: &[String],
+) -> Result<(PoseidonAnchor<AppField>, AppField), ApplicationError> {
+    let (hanchor_str, anchor_strings) = anchor_parts
+        .split_last()
+        .ok_or_else(|| ApplicationError::InvalidFormat("Input cannot be empty".to_string()))?;
+
+    let hanchor = str_to_field::<AppField>(hanchor_str)
+        .map_err(|e| ApplicationError::InvalidFormat(format!("Failed to parse hanchor: {}", e)))?;
+
+    let anchor = PoseidonAnchor::<AppField>::from_str(anchor_strings)
+        .map_err(|e| ApplicationError::InvalidFormat(format!("Failed to parse anchor: {}", e)))?;
+
+    Ok((anchor, hanchor))
+}
+
+pub(crate) fn build_anchor_witness(
+    n: usize,
+    k: usize,
+    selected_secrets: &[AppField],
+    selector: &[bool],
+) -> Result<PoseidonAnchorWitness<AppField>, ApplicationError> {
+    if selector.len() != n {
+        return Err(ApplicationError::InvalidFormat(
+            "Selector length does not match n".to_string(),
+        ));
+    }
+
+    if selected_secrets.len() != k {
+        return Err(ApplicationError::InvalidFormat(
+            "Selected secrets length does not match selector length".to_string(),
+        ));
+    }
+
+    let matrix = Matrix::<AppField>::new(n, k)
+        .map_err(|_| ApplicationError::InvalidFormat("Failed to create matrix".to_string()))?;
+
+    let selector: Vec<usize> = selector.iter().map(|&b| if b { 1 } else { 0 }).collect();
+
+    let known_secrets_struct: PoseidonAnchorSecret<AppField> = selected_secrets.to_vec().into();
+
+    let anchor_witness =
+        PoseidonAnchorScheme::generate_witness(&known_secrets_struct, &selector, &matrix).map_err(
+            |e| ApplicationError::InvalidFormat(format!("Failed to generate witness: {}", e)),
+        )?;
+
+    Ok(anchor_witness)
 }
