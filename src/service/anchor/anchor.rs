@@ -26,7 +26,7 @@ use crate::{
             SecretGenerator,
         },
         constants::{AppCurve, AppField, PoseidonHash},
-        key::{anchor::ANCHOR_KEY_MANAGER, io::save_key_uncompressed, manager::KeyHandle},
+        key::{self, anchor::ANCHOR_KEY_MANAGER, io::{load_key_uncompressed, save_key_uncompressed}, manager::KeyHandle},
     },
     utils::padding::calculate_fitted_lengths,
 };
@@ -70,23 +70,21 @@ pub fn generate_and_write_dl_anchor_key(
 }
 
 pub fn create_poseidon_anchor(
-    handle_raw: u64,
+    key_path: String,
     secrets: Vec<SecretDto>,
 ) -> Result<Vec<String>, ApplicationError> {
-    let handle = KeyHandle(handle_raw);
 
-    let anchor_key_arc =
-        ANCHOR_KEY_MANAGER.get_typed::<PoseidonAnchorKeyExtension<AppField>>(handle)?;
+    let anchor_key = load_key_uncompressed::<PoseidonAnchorKeyExtension<AppField>>(&PathBuf::from(key_path))?;
 
     let hashed_message = derive_hashed_message(
         &secrets,
-        anchor_key_arc.max_aud_len,
-        anchor_key_arc.max_iss_len,
-        anchor_key_arc.max_sub_len,
+        anchor_key.max_aud_len,
+        anchor_key.max_iss_len,
+        anchor_key.max_sub_len,
     )?;
 
     let anchor_secret: PoseidonAnchorSecret<AppField> = hashed_message.into();
-    let anchor = PoseidonAnchorService::anchor(&anchor_key_arc, &anchor_secret)?;
+    let anchor = PoseidonAnchorService::anchor(&anchor_key, &anchor_secret)?;
 
     let out = anchor
         .0
@@ -127,16 +125,13 @@ pub fn create_dl_anchor(
 }
 
 pub fn poseidon_derive_indices(
-    handle_raw: u64,
+    key_path: String,
     anchor: Vec<String>,
     known_secrets: Vec<SecretDto>,
 ) -> Result<Vec<u8>, ApplicationError> {
-    let handle = KeyHandle(handle_raw);
+    let anchor_key = load_key_uncompressed::<PoseidonAnchorKeyExtension<AppField>>(&PathBuf::from(key_path))?;
 
-    let anchor_key_arc =
-        ANCHOR_KEY_MANAGER.get_typed::<PoseidonAnchorKeyExtension<AppField>>(handle)?;
-
-    let expected_len = anchor_key_arc.n + anchor_key_arc.k - 1;
+    let expected_len = anchor_key.n + anchor_key.k - 1;
     if expected_len != anchor.len() {
         return Err(ApplicationError::InvalidFormat(format!(
             "Anchor length must be {} (n + k - 1), got {}",
@@ -149,15 +144,15 @@ pub fn poseidon_derive_indices(
 
     let hashed_message = derive_hashed_message(
         &known_secrets,
-        anchor_key_arc.max_aud_len,
-        anchor_key_arc.max_iss_len,
-        anchor_key_arc.max_sub_len,
+        anchor_key.max_aud_len,
+        anchor_key.max_iss_len,
+        anchor_key.max_sub_len,
     )?;
 
     let known_secrets_struct: PoseidonAnchorSecret<AppField> = hashed_message.into();
 
     let indices = PoseidonAnchorService::derive_secret_indices(
-        &anchor_key_arc,
+        &anchor_key,
         &anchor_val,
         &known_secrets_struct,
     )?;

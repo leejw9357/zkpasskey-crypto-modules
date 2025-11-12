@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{BufWriter, Write},
+    io::{BufReader, BufWriter, Write},
     path::PathBuf,
 };
 
@@ -39,20 +39,29 @@ pub fn load_key_uncompressed<T: CanonicalDeserialize + Send + Sync + 'static>(
         source,
     })?;
 
-    let mmap = unsafe {
-        memmap2::MmapOptions::new()
-            .map(&file)
-            .map_err(|source| KeyError::LoadFailed {
-                path: path.display().to_string(),
-                source,
-            })?
-    };
+    // let mmap = unsafe {
+    //     memmap2::MmapOptions::new()
+    //         .map(&file)
+    //         .map_err(|source| KeyError::LoadFailed {
+    //             path: path.display().to_string(),
+    //             source,
+    //         })?
+    // };
 
-    let mut slice: &[u8] = &mmap;
-    T::deserialize_uncompressed_unchecked(&mut slice).map_err(|source| {
+    // let mut slice: &[u8] = &mmap;
+    // T::deserialize_uncompressed_unchecked(&mut slice).map_err(|source| {
+    //     KeyError::DeserializeFailed {
+    //         path: path.display().to_string(),
+    //         source,
+    //     }
+    // })
+    let mut reader = BufReader::new(file);
+    let key = T::deserialize_uncompressed_unchecked(&mut reader).map_err(|source| {
         KeyError::DeserializeFailed {
             path: path.display().to_string(),
             source,
         }
-    })
+    })?;
+
+    Ok(key)
 }
